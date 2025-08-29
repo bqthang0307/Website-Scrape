@@ -34,6 +34,7 @@ class SendRequest(BaseModel):
 
 
 def _autoscroll(page, distance: int = 500, delay_ms: int = 250):
+    """Gradual scroll to trigger lazy-loaded and animated content."""
     page.evaluate("""
         async (distance, delay) => {
             await new Promise((resolve) => {
@@ -50,7 +51,8 @@ def _autoscroll(page, distance: int = 500, delay_ms: int = 250):
                 }, delay);
             });
         }
-    """, distance, delay_ms)
+    """, args=[distance, delay_ms])  # Pass arguments as a list to args
+
 
 
 
