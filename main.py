@@ -126,7 +126,7 @@ def send_screenshot_base64(
 @app.post("/scrape")
 def scrape(req: ScrapeRequest):
     data = take_screenshot_base64(
-        req.url,
+        str(req.url),
         user_agent=req.user_agent,
         timeout_ms=req.timeout_ms,
         full_page=req.full_page,
