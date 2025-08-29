@@ -51,7 +51,7 @@ def _autoscroll(page, distance: int = 500, delay_ms: int = 250):
                 }, delay);
             });
         }
-    """, args=[distance, delay_ms])  # Pass arguments as a list to args
+    """, distance, delay_ms)  # Pass variables as arguments here
 
 
 
