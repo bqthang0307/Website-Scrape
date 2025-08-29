@@ -33,23 +33,26 @@ class SendRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-def _autoscroll(page, steps: int = 12, delay_ms: int = 250):
-    page.evaluate(
-        """
-        async (steps, delay) => {
-          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-          const total = document.body.scrollHeight;
-          const step = Math.max(1, Math.floor(total / steps));
-          for (let y = 0; y < total; y += step) {
-            window.scrollTo(0, y);
-            await sleep(delay);
-          }
-          window.scrollTo(0, 0);
+def _autoscroll(page, delay_ms: int = 300, distance: int = 500):
+    """Gradual scroll to trigger lazy-loaded and animated content."""
+    page.evaluate("""
+        async (distance, delay) => {
+            await new Promise((resolve) => {
+                let totalHeight = 0;
+                const scrollHeight = document.body.scrollHeight;
+                const timer = setInterval(() => {
+                    window.scrollBy(0, distance);
+                    totalHeight += distance;
+
+                    if (totalHeight >= scrollHeight) {
+                        clearInterval(timer);
+                        resolve();
+                    }
+                }, delay);
+            });
         }
-        """,
-        steps,
-        delay_ms,
-    )
+    """, distance, delay_ms)
+
 
 
 def take_screenshot_base64(
@@ -80,13 +83,11 @@ def take_screenshot_base64(
             browser.close()
             raise HTTPException(status_code=504, detail="Page navigation timeout")
 
+        # Enable autoscroll if the flag is True
         if autoscroll:
-            try:
-                _autoscroll(page, steps=20, delay_ms=100)  # Increase steps and reduce delay to scroll better
-            except Exception as e:
-                # Log or handle exceptions
-                print(f"Autoscroll failed: {e}")
+            _autoscroll(page, distance=500, delay_ms=250)  # Adjust as needed
 
+        # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
 
@@ -104,6 +105,7 @@ def take_screenshot_base64(
             "viewport": {"width": viewport_width, "height": viewport_height},
             "full_page": full_page,
         }
+
 
 
 def send_screenshot_base64(
