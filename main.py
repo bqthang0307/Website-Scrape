@@ -33,8 +33,7 @@ class SendRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-def _autoscroll(page, delay_ms: int = 300, distance: int = 500):
-    """Gradual scroll to trigger lazy-loaded and animated content."""
+def _autoscroll(page, distance: int = 500, delay_ms: int = 250):
     page.evaluate("""
         async (distance, delay) => {
             await new Promise((resolve) => {
