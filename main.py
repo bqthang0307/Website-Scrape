@@ -82,9 +82,10 @@ def take_screenshot_base64(
 
         if autoscroll:
             try:
-                _autoscroll(page, steps=autoscroll_steps, delay_ms=autoscroll_delay_ms)
-            except Exception:
-                pass
+                _autoscroll(page, steps=20, delay_ms=100)  # Increase steps and reduce delay to scroll better
+            except Exception as e:
+                # Log or handle exceptions
+                print(f"Autoscroll failed: {e}")
 
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
@@ -154,7 +155,7 @@ def scrape(req: ScrapeRequest):
         except Exception as e:
             notify_result = {"error": str(e)}
 
-    return {"ok": True, "data": data, "notify_result": notify_result}
+    return {"ok": True, "data": data, "notify_result": str(notify_result)}
 
 
 @app.post("/send")
