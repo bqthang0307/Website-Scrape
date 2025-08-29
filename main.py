@@ -46,7 +46,7 @@ def _autoscroll(page, steps: int = 12, delay_ms: int = 250):
           }
           window.scrollTo(0, 0);
         }
-        ",
+        """,
         steps,
         delay_ms,
     )
