@@ -1,4 +1,5 @@
 import base64
+import asyncio
 import json
 from typing import Optional, Dict, Any
 
@@ -87,8 +88,7 @@ async def take_screenshot_base64(
         # Enable autoscroll if the flag is True
         if autoscroll:
             _autoscroll(page)  # Adjust as needed
-            
-        await page.waitFor(2000)
+        await asyncio.sleep(2)
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
