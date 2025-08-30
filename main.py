@@ -33,7 +33,7 @@ class SendRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-def _autoscroll(page, delay_ms: int = 300):
+def _autoscroll(page, delay_ms: int = 700):
     page.evaluate(
         """
         async (delay) => {
