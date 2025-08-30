@@ -79,7 +79,7 @@ def take_screenshot_base64(
         page = context.new_page()
         # Block all video requests to prevent buffering delays
         context.route("**/*", lambda route: route.abort() if route.request.resource_type == "media" else route.continue_())
-        
+
         try:
             page.goto(url, wait_until=wait_until, timeout=timeout_ms)
         except PWTimeoutError:
@@ -94,12 +94,12 @@ def take_screenshot_base64(
         # Wait 2 seconds synchronously
         time.sleep(5)
 
-        # Pause all videos on the page to avoid screenshot timeout
-        page.evaluate("""
-        () => {
-            document.querySelectorAll('video').forEach(v => v.pause());
-        }
-        """)
+        # # Pause all videos on the page to avoid screenshot timeout
+        # page.evaluate("""
+        # () => {
+        #     document.querySelectorAll('video').forEach(v => v.pause());
+        # }
+        # """)
 
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
