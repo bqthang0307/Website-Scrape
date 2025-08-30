@@ -129,24 +129,31 @@ def send_screenshot_base64(
 
 
 @app.post("/scrape")
-def scrape(req: ScrapeRequest):
-    data = take_screenshot_base64(
-        str(req.url),
-        user_agent=req.user_agent,
-        timeout_ms=req.timeout_ms,
-        full_page=req.full_page,
-        viewport_width=req.viewport_width,
-        viewport_height=req.viewport_height,
-        wait_until=req.wait_until,
-        autoscroll=req.autoscroll,
-        autoscroll_steps=req.autoscroll_steps,
-        autoscroll_delay_ms=req.autoscroll_delay_ms,
-    )
+async def scrape(req: ScrapeRequest):
+    # Wait 2 seconds before starting
+    await asyncio.sleep(2)
+
+    try:
+        data = await take_screenshot_base64(
+            str(req.url),
+            user_agent=req.user_agent,
+            timeout_ms=req.timeout_ms,
+            full_page=req.full_page,
+            viewport_width=req.viewport_width,
+            viewport_height=req.viewport_height,
+            wait_until=req.wait_until,
+            autoscroll=req.autoscroll,
+            autoscroll_steps=req.autoscroll_steps,
+            autoscroll_delay_ms=req.autoscroll_delay_ms,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Screenshot error: {str(e)}")
 
     notify_result = None
     if req.notify_api:
         try:
-            notify_result = send_screenshot_base64(
+            # If send_screenshot_base64 is async, await it too
+            notify_result = await send_screenshot_base64(
                 target_api=str(req.notify_api),
                 screenshot_base64=data["screenshot_base64"],
                 meta={
@@ -159,13 +166,13 @@ def scrape(req: ScrapeRequest):
         except Exception as e:
             notify_result = {"error": str(e)}
 
-    return {"ok": True, "data": data, "notify_result": str(notify_result)}
+    return {"ok": True, "data": data, "notify_result": notify_result}
 
 
 @app.post("/send")
-def send_only(req: SendRequest):
+async def send_only(req: SendRequest):
     try:
-        result = send_screenshot_base64(
+        result = await send_screenshot_base64(
             target_api=str(req.target_api),
             screenshot_base64=req.screenshot_base64,
             meta=req.meta or {},
