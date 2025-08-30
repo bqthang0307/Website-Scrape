@@ -34,8 +34,9 @@ class SendRequest(BaseModel):
 
 
 def _autoscroll(page, delay_ms: int = 300):
-    page.evaluate("""
-        async () => {
+    page.evaluate(
+        """
+        async (delay) => {
             await new Promise((resolve) => {
                 let totalHeight = 0;
                 const distance = 500;
@@ -48,10 +49,12 @@ def _autoscroll(page, delay_ms: int = 300):
                         clearInterval(timer);
                         resolve();
                     }
-                }, 300);
+                }, delay);
             });
         }
-    """, delay_ms)  # Pass variables as arguments here
+        """,
+        delay_ms  # Use the Python delay_ms in JS
+    )
 
 
 
@@ -92,14 +95,14 @@ def take_screenshot_base64(
             _autoscroll(page)  # Adjust as needed
 
         # Wait 2 seconds synchronously
-        time.sleep(5)
+        time.sleep(2)
 
-        # # Pause all videos on the page to avoid screenshot timeout
-        # page.evaluate("""
-        # () => {
-        #     document.querySelectorAll('video').forEach(v => v.pause());
-        # }
-        # """)
+        # Pause all videos on the page to avoid screenshot timeout
+        page.evaluate("""
+        () => {
+            document.querySelectorAll('video').forEach(v => v.pause());
+        }
+        """)
 
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
