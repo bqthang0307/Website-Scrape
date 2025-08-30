@@ -56,7 +56,7 @@ def _autoscroll(page, delay_ms: int = 300):
 
 
 
-def take_screenshot_base64(
+async def take_screenshot_base64(
     url: str,
     *,
     user_agent: Optional[str],
@@ -87,7 +87,8 @@ def take_screenshot_base64(
         # Enable autoscroll if the flag is True
         if autoscroll:
             _autoscroll(page)  # Adjust as needed
-
+            
+        await page.waitFor(2000)
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
