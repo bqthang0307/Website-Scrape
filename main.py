@@ -33,13 +33,14 @@ class SendRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-def _autoscroll(page, delay_ms: int = 250):
+def _autoscroll(page, delay_ms: int = 300):
     page.evaluate("""
-        async (distance, delay) => {
+        async () => {
             await new Promise((resolve) => {
                 let totalHeight = 0;
-                const scrollHeight = document.body.scrollHeight;
+                const distance = 500;
                 const timer = setInterval(() => {
+                    const scrollHeight = document.body.scrollHeight;
                     window.scrollBy(0, distance);
                     totalHeight += distance;
 
@@ -47,7 +48,7 @@ def _autoscroll(page, delay_ms: int = 250):
                         clearInterval(timer);
                         resolve();
                     }
-                }, delay);
+                }, 300);
             });
         }
     """, delay_ms)  # Pass variables as arguments here
