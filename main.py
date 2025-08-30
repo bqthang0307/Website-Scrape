@@ -89,7 +89,7 @@ def take_screenshot_base64(
             _autoscroll(page)  # Adjust as needed
 
         # Wait 2 seconds synchronously
-        time.sleep(2)
+        time.sleep(5)
 
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
