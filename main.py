@@ -1,8 +1,7 @@
 import base64
-import asyncio
 import json
 from typing import Optional, Dict, Any
-
+import time
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
@@ -57,7 +56,7 @@ def _autoscroll(page, delay_ms: int = 300):
 
 
 
-async def take_screenshot_base64(
+def take_screenshot_base64(
     url: str,
     *,
     user_agent: Optional[str],
@@ -88,7 +87,10 @@ async def take_screenshot_base64(
         # Enable autoscroll if the flag is True
         if autoscroll:
             _autoscroll(page)  # Adjust as needed
-        await asyncio.sleep(2)
+
+        # Wait 2 seconds synchronously
+        time.sleep(2)
+
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
@@ -129,31 +131,24 @@ def send_screenshot_base64(
 
 
 @app.post("/scrape")
-async def scrape(req: ScrapeRequest):
-    # Wait 2 seconds before starting
-    await asyncio.sleep(2)
-
-    try:
-        data = await take_screenshot_base64(
-            str(req.url),
-            user_agent=req.user_agent,
-            timeout_ms=req.timeout_ms,
-            full_page=req.full_page,
-            viewport_width=req.viewport_width,
-            viewport_height=req.viewport_height,
-            wait_until=req.wait_until,
-            autoscroll=req.autoscroll,
-            autoscroll_steps=req.autoscroll_steps,
-            autoscroll_delay_ms=req.autoscroll_delay_ms,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Screenshot error: {str(e)}")
+def scrape(req: ScrapeRequest):
+    data = take_screenshot_base64(
+        str(req.url),
+        user_agent=req.user_agent,
+        timeout_ms=req.timeout_ms,
+        full_page=req.full_page,
+        viewport_width=req.viewport_width,
+        viewport_height=req.viewport_height,
+        wait_until=req.wait_until,
+        autoscroll=req.autoscroll,
+        autoscroll_steps=req.autoscroll_steps,
+        autoscroll_delay_ms=req.autoscroll_delay_ms,
+    )
 
     notify_result = None
     if req.notify_api:
         try:
-            # If send_screenshot_base64 is async, await it too
-            notify_result = await send_screenshot_base64(
+            notify_result = send_screenshot_base64(
                 target_api=str(req.notify_api),
                 screenshot_base64=data["screenshot_base64"],
                 meta={
@@ -166,13 +161,13 @@ async def scrape(req: ScrapeRequest):
         except Exception as e:
             notify_result = {"error": str(e)}
 
-    return {"ok": True, "data": data, "notify_result": notify_result}
+    return {"ok": True, "data": data, "notify_result": str(notify_result)}
 
 
 @app.post("/send")
-async def send_only(req: SendRequest):
+def send_only(req: SendRequest):
     try:
-        result = await send_screenshot_base64(
+        result = send_screenshot_base64(
             target_api=str(req.target_api),
             screenshot_base64=req.screenshot_base64,
             meta=req.meta or {},
