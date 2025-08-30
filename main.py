@@ -91,6 +91,13 @@ def take_screenshot_base64(
         # Wait 2 seconds synchronously
         time.sleep(5)
 
+        # Pause all videos on the page to avoid screenshot timeout
+        page.evaluate("""
+        () => {
+            document.querySelectorAll('video').forEach(v => v.pause());
+        }
+        """)
+        
         # Take a screenshot of the full page
         png_bytes = page.screenshot(full_page=full_page, type="png")
         b64 = base64.b64encode(png_bytes).decode("utf-8")
