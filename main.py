@@ -56,6 +56,65 @@ def _autoscroll(page, *, steps: int, delay_ms: int) -> None:
     )
 
 
+def _autoscroll_until_settled(page, *, max_rounds: int = 20, step_px: int = 800, delay_ms: int = 300) -> None:
+    """Scrolls down until scroll height stops growing or max rounds reached."""
+    page.evaluate(
+        """
+        async ({ maxRounds, step, delay }) => {
+            let lastHeight = -1;
+            let rounds = 0;
+            const wait = (ms) => new Promise(r => setTimeout(r, ms));
+            while (rounds < maxRounds) {
+                const { scrollHeight } = document.documentElement;
+                if (scrollHeight === lastHeight) break;
+                lastHeight = scrollHeight;
+                window.scrollBy(0, step);
+                window.scrollTo(0, document.body.scrollHeight);
+                await wait(delay);
+                rounds += 1;
+            }
+            window.scrollTo(0, 0);
+        }
+        """,
+        {"maxRounds": int(max_rounds), "step": int(step_px), "delay": int(delay_ms)}
+    )
+
+
+def _disable_fixed_backgrounds_and_effects(page) -> None:
+    """Avoid white gaps in stitched screenshots caused by parallax/fixed backgrounds."""
+    css = (
+        "html, body, * {"
+        " background-attachment: initial !important;"
+        " background-position: 0 0 !important;"
+        " scroll-behavior: auto !important;"
+        "}"
+    )
+    try:
+        page.add_style_tag(content=css)
+    except Exception:
+        pass
+
+
+def _ensure_assets_loaded(page, *, timeout_ms: int = 5000) -> None:
+    """Wait for images to decode and fonts to be ready."""
+    try:
+        page.evaluate(
+            """
+            async (timeout) => {
+                const abort = new Promise((_, rej) => setTimeout(() => rej(new Error('assets-timeout')), timeout));
+                const waitFonts = (typeof document.fonts !== 'undefined') ? document.fonts.ready.catch(()=>{}) : Promise.resolve();
+                const imgs = Array.from(document.images || []);
+                const waitImages = Promise.all(imgs.map(img => (img.complete ? Promise.resolve() : (img.decode ? img.decode().catch(()=>{}) : new Promise(r => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); })) )));
+                await Promise.race([Promise.all([waitFonts, waitImages]), abort]);
+            }
+            """,
+            int(timeout_ms)
+        )
+    except Exception:
+        # best-effort only
+        pass
+
+
 
 
 def take_screenshot_base64(
@@ -107,12 +166,24 @@ def take_screenshot_base64(
         except Exception:
             pass
 
+        # Prevent parallax/fixed backgrounds causing full-page stitch gaps
+        _disable_fixed_backgrounds_and_effects(page)
+
         # Enable autoscroll if the flag is True
         if autoscroll:
             _autoscroll(page, steps=autoscroll_steps, delay_ms=autoscroll_delay_ms)
+            # Also traverse until height settles to catch lazy content
+            _autoscroll_until_settled(page, max_rounds=25, step_px=900, delay_ms=max(100, autoscroll_delay_ms))
 
         # Wait 2 seconds synchronously
         time.sleep(2)
+
+        # Ensure images and fonts are ready, then wait briefly for network to be idle
+        _ensure_assets_loaded(page, timeout_ms=min(8000, max(2000, timeout_ms // 4)))
+        try:
+            page.wait_for_load_state("networkidle", timeout=min(5000, timeout_ms))
+        except Exception:
+            pass
 
         # Pause all videos on the page to avoid screenshot timeout
         page.evaluate("""
