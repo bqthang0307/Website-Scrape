@@ -25,6 +25,8 @@ class ScrapeRequest(BaseModel):
     autoscroll: Optional[bool] = True
     autoscroll_steps: Optional[int] = 12
     autoscroll_delay_ms: Optional[int] = 250
+    screenshot_retries: Optional[int] = 2
+    screenshot_wait_ms_between_retries: Optional[int] = 1000
 
 
 class SendRequest(BaseModel):
@@ -33,27 +35,24 @@ class SendRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
 
 
-def _autoscroll(page, delay_ms: int = 700):
+def _autoscroll(page, *, steps: int, delay_ms: int) -> None:
+    """Scrolls down the page in incremental steps to trigger lazy loading.
+
+    Uses the provided number of steps and delay between steps.
+    """
     page.evaluate(
         """
-        async (delay) => {
-            await new Promise((resolve) => {
-                let totalHeight = 0;
-                const distance = 500;
-                const timer = setInterval(() => {
-                    const scrollHeight = document.body.scrollHeight;
-                    window.scrollBy(0, distance);
-                    totalHeight += distance;
-
-                    if (totalHeight >= scrollHeight) {
-                        clearInterval(timer);
-                        resolve();
-                    }
-                }, delay);
-            });
+        async ({ steps, delay }) => {
+            const distance = 600;
+            for (let i = 0; i < steps; i++) {
+                window.scrollBy(0, distance);
+                await new Promise(r => setTimeout(r, delay));
+            }
+            // Scroll to the very bottom once more
+            window.scrollTo(0, document.body.scrollHeight);
         }
         """,
-        delay_ms  # Use the Python delay_ms in JS
+        {"steps": int(steps), "delay": int(delay_ms)}
     )
 
 
@@ -71,6 +70,8 @@ def take_screenshot_base64(
     autoscroll: bool,
     autoscroll_steps: int,
     autoscroll_delay_ms: int,
+    screenshot_retries: int = 2,
+    screenshot_wait_ms_between_retries: int = 1000,
 ) -> Dict[str, Any]:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
@@ -84,15 +85,31 @@ def take_screenshot_base64(
         context.route("**/*", lambda route: route.abort() if route.request.resource_type == "media" else route.continue_())
 
         try:
+            # Align default timeouts
+            context.set_default_timeout(timeout_ms)
+            page.set_default_timeout(timeout_ms)
+
             page.goto(url, wait_until=wait_until, timeout=timeout_ms)
         except PWTimeoutError:
             context.close()
             browser.close()
             raise HTTPException(status_code=504, detail="Page navigation timeout")
 
+        # Prefer reduced motion to avoid long-running animations interfering with screenshots
+        try:
+            page.emulate_media(reduced_motion="reduce")
+        except Exception:
+            pass
+
+        # Disable CSS animations and transitions
+        try:
+            page.add_style_tag(content="* { animation: none !important; transition: none !important; }")
+        except Exception:
+            pass
+
         # Enable autoscroll if the flag is True
         if autoscroll:
-            _autoscroll(page)  # Adjust as needed
+            _autoscroll(page, steps=autoscroll_steps, delay_ms=autoscroll_delay_ms)
 
         # Wait 2 seconds synchronously
         time.sleep(2)
@@ -104,8 +121,40 @@ def take_screenshot_base64(
         }
         """)
 
-        # Take a screenshot of the full page
-        png_bytes = page.screenshot(full_page=full_page, type="png")
+        # Attempt screenshot with limited retries and a fallback to viewport-only
+        last_error: Optional[Exception] = None
+        png_bytes = None
+        for attempt_index in range(max(1, int(screenshot_retries))):
+            try:
+                png_bytes = page.screenshot(
+                    full_page=full_page,
+                    type="png",
+                    timeout=timeout_ms,
+                )
+                last_error = None
+                break
+            except Exception as e:
+                last_error = e
+                # Small wait before retry
+                time.sleep(max(0, int(screenshot_wait_ms_between_retries)) / 1000.0)
+                # On last retry, try again with full_page=False as a fallback
+                if attempt_index == int(screenshot_retries) - 1:
+                    try:
+                        png_bytes = page.screenshot(
+                            full_page=False,
+                            type="png",
+                            timeout=timeout_ms,
+                        )
+                        last_error = None
+                        break
+                    except Exception as e2:
+                        last_error = e2
+
+        if png_bytes is None:
+            context.close()
+            browser.close()
+            raise HTTPException(status_code=504, detail=f"Screenshot failed: {str(last_error) if last_error else 'Unknown error'}")
+
         b64 = base64.b64encode(png_bytes).decode("utf-8")
 
         title = page.title()
@@ -156,6 +205,8 @@ def scrape(req: ScrapeRequest):
         autoscroll=req.autoscroll,
         autoscroll_steps=req.autoscroll_steps,
         autoscroll_delay_ms=req.autoscroll_delay_ms,
+        screenshot_retries=req.screenshot_retries or 2,
+        screenshot_wait_ms_between_retries=req.screenshot_wait_ms_between_retries or 1000,
     )
 
     notify_result = None
